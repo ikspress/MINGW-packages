@@ -1,0 +1,174 @@
+diff --git libressl-3.9.2-orig/CMakeLists.txt libressl-3.9.2/CMakeLists.txt
+index 01a42fb..f81efdc 100644
+--- libressl-3.9.2-orig/CMakeLists.txt
++++ libressl-3.9.2/CMakeLists.txt
+@@ -123,6 +123,7 @@ add_definitions(-DLIBRESSL_INTERNAL)
+ add_definitions(-DOPENSSL_NO_HW_PADLOCK)
+ add_definitions(-D__BEGIN_HIDDEN_DECLS=)
+ add_definitions(-D__END_HIDDEN_DECLS=)
++add_definitions(-DOPENSSLBIN=\"${CMAKE_INSTALL_FULL_BINDIR}\")
+ 
+ set(CMAKE_POSITION_INDEPENDENT_CODE true)
+ 
+diff --git libressl-3.9.2-orig/Makefile.am.common libressl-3.9.2/Makefile.am.common
+index 5405704..a166c15 100644
+--- libressl-3.9.2-orig/Makefile.am.common
++++ libressl-3.9.2/Makefile.am.common
+@@ -3,3 +3,4 @@ AM_CPPFLAGS = -I$(top_srcdir)/include
+ AM_CPPFLAGS += -I$(abs_top_builddir)/include
+ AM_CPPFLAGS += -I$(top_srcdir)/include/compat -DLIBRESSL_INTERNAL
+ AM_CPPFLAGS += -D__BEGIN_HIDDEN_DECLS= -D__END_HIDDEN_DECLS=
++AM_CPPFLAGS += -DOPENSSLBIN=\"$(bindir)\"
+diff --git libressl-3.9.2-orig/crypto/CMakeLists.txt libressl-3.9.2/crypto/CMakeLists.txt
+index d4e0d60..6533083 100644
+--- libressl-3.9.2-orig/crypto/CMakeLists.txt
++++ libressl-3.9.2/crypto/CMakeLists.txt
+@@ -256,6 +256,7 @@ set(
+ 	o_fips.c
+ 	o_init.c
+ 	o_str.c
++	pathtools.c
+ 	aes/aes_cfb.c
+ 	aes/aes_ctr.c
+ 	aes/aes_ecb.c
+diff --git libressl-3.9.2-orig/crypto/Makefile.am libressl-3.9.2/crypto/Makefile.am
+index d6fb3d0..2e657b6 100644
+--- libressl-3.9.2-orig/crypto/Makefile.am
++++ libressl-3.9.2/crypto/Makefile.am
+@@ -946,3 +946,7 @@ noinst_HEADERS += x509/x509_internal.h
+ noinst_HEADERS += x509/x509_issuer_cache.h
+ noinst_HEADERS += x509/x509_local.h
+ noinst_HEADERS += x509/x509_verify.h
++
++# pathtools
++libcrypto_la_SOURCES += pathtools.c
++noinst_HEADERS += pathtools.h
+diff --git libressl-3.9.2-orig/crypto/ct/ct_log.c libressl-3.9.2/crypto/ct/ct_log.c
+index eb503a3..475fbcb 100644
+--- libressl-3.9.2-orig/crypto/ct/ct_log.c
++++ libressl-3.9.2/crypto/ct/ct_log.c
+@@ -68,6 +68,7 @@
+ #include <openssl/safestack.h>
+ 
+ #include "cryptlib.h"
++#include "pathtools.h"
+ 
+ 
+ /*
+@@ -198,7 +199,11 @@ ctlog_new_from_conf(CTLOG **ct_log, const CONF *conf, const char *section)
+ int
+ CTLOG_STORE_load_default_file(CTLOG_STORE *store)
+ {
+-	return CTLOG_STORE_load_file(store, CTLOG_FILE);
++	static char *reloc = NULL;
++	if (reloc == NULL) {
++		reloc = single_path_relocation_lib(OPENSSLBIN, CTLOG_FILE);
++	}
++	return CTLOG_STORE_load_file(store, reloc);
+ }
+ LCRYPTO_ALIAS(CTLOG_STORE_load_default_file);
+ 
+diff --git libressl-3.9.2-orig/crypto/x509/x509_def.c libressl-3.9.2/crypto/x509/x509_def.c
+index f85781a..1f708a3 100644
+--- libressl-3.9.2-orig/crypto/x509/x509_def.c
++++ libressl-3.9.2/crypto/x509/x509_def.c
+@@ -60,32 +60,49 @@
+ #include "cryptlib.h"
+ #include <openssl/crypto.h>
+ #include <openssl/x509.h>
++#include "pathtools.h"
+ 
+ const char *
+ X509_get_default_private_dir(void)
+ {
+-	return (X509_PRIVATE_DIR);
++	static char *reloc = NULL;
++	if (reloc == NULL) {
++		reloc = single_path_relocation_lib(OPENSSLBIN, X509_PRIVATE_DIR);
++	}
++	return reloc;
+ }
+ LCRYPTO_ALIAS(X509_get_default_private_dir);
+ 
+ const char *
+ X509_get_default_cert_area(void)
+ {
+-	return (X509_CERT_AREA);
++	static char *reloc = NULL;
++	if (reloc == NULL) {
++		reloc = single_path_relocation_lib(OPENSSLBIN, X509_CERT_AREA);
++	}
++	return reloc;
+ }
+ LCRYPTO_ALIAS(X509_get_default_cert_area);
+ 
+ const char *
+ X509_get_default_cert_dir(void)
+ {
+-	return (X509_CERT_DIR);
++	static char *reloc = NULL;
++	if (reloc == NULL) {
++		reloc = single_path_relocation_lib(OPENSSLBIN, X509_CERT_DIR);
++	}
++	return reloc;
+ }
+ LCRYPTO_ALIAS(X509_get_default_cert_dir);
+ 
+ const char *
+ X509_get_default_cert_file(void)
+ {
+-	return (X509_CERT_FILE);
++	static char *reloc = NULL;
++	if (reloc == NULL) {
++		reloc = single_path_relocation_lib(OPENSSLBIN, X509_CERT_FILE);
++	}
++	return reloc;
+ }
+ LCRYPTO_ALIAS(X509_get_default_cert_file);
+ 
+diff --git libressl-3.9.2-orig/tls/CMakeLists.txt libressl-3.9.2/tls/CMakeLists.txt
+index 919b1fa..cdc64b0 100644
+--- libressl-3.9.2-orig/tls/CMakeLists.txt
++++ libressl-3.9.2/tls/CMakeLists.txt
+@@ -1,5 +1,6 @@
+ set(
+ 	TLS_SRC
++	pathtools.c
+ 	tls.c
+ 	tls_bio_cb.c
+ 	tls_client.c
+diff --git libressl-3.9.2-orig/tls/Makefile.am libressl-3.9.2/tls/Makefile.am
+index 22f3222..f15de18 100644
+--- libressl-3.9.2-orig/tls/Makefile.am
++++ libressl-3.9.2/tls/Makefile.am
+@@ -59,3 +59,6 @@ libtls_la_SOURCES += compat/ftruncate.c
+ libtls_la_SOURCES += compat/pread.c
+ libtls_la_SOURCES += compat/pwrite.c
+ endif
++
++libtls_la_SOURCES += pathtools.c
++noinst_HEADERS += pathtools.h
+diff --git libressl-3.9.2-orig/tls/tls_config.c libressl-3.9.2/tls/tls_config.c
+index 5eb5b69..873d55f 100644
+--- libressl-3.9.2-orig/tls/tls_config.c
++++ libressl-3.9.2/tls/tls_config.c
+@@ -28,13 +28,18 @@
+ #include <tls.h>
+ 
+ #include "tls_internal.h"
++#include "pathtools.h"
+ 
+ static const char default_ca_file[] = TLS_DEFAULT_CA_FILE;
+ 
+ const char *
+ tls_default_ca_cert_file(void)
+ {
+-	return default_ca_file;
++	static char *reloc = NULL;
++	if (reloc == NULL) {
++		reloc = single_path_relocation_lib(OPENSSLBIN, default_ca_file);
++	}
++	return reloc;
+ }
+ 
+ int
